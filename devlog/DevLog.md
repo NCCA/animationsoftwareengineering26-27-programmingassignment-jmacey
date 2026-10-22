@@ -25,3 +25,11 @@ uv add --dev pytest
 uv add --dev pytest-qt
 uv add --dev pytest-coverage
 ```
+
+## Basic Testing plan
+
+Write Lattice, and ControlPoint classes first
+Mesh will use Obj from PyNGL but access the verts directly for FFD
+Draw lattice and control points and allow for selection of control points.
+Add manipulators and allow for selections of control points.
+Update all selected control points when the lattice is moved.

@@ -7,7 +7,9 @@ authors = [
     { name = "Jon Macey", email = "jmacey@bournemouth.ac.uk" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "ncca-ngl>=1.0.3",
+]
 
 [project.scripts]
 animationsoftwareengineering26-27-programmingassignment-jmacey = "animationsoftwareengineering26_27_programmingassignment_jmacey:main"
@@ -15,3 +17,9 @@ animationsoftwareengineering26-27-programmingassignment-jmacey = "animationsoftw
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest-coverage>=0.0",
+    "pytest-qt>=4.5.0",
+]

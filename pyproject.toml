@@ -1,7 +1,7 @@
 [project]
-name = "animationsoftwareengineering26-27-programmingassignment-jmacey"
+name = "FFD"
 version = "0.1.0"
-description = "Add your description here"
+description = "An implementation of Free Form Deformations"
 readme = "README.md"
 authors = [
     { name = "Jon Macey", email = "jmacey@bournemouth.ac.uk" }
@@ -11,15 +11,18 @@ dependencies = [
     "ncca-ngl>=1.0.3",
 ]
 
-[project.scripts]
-animationsoftwareengineering26-27-programmingassignment-jmacey = "animationsoftwareengineering26_27_programmingassignment_jmacey:main"
-
-[build-system]
-requires = ["uv_build>=0.13.5,<0.14.0"]
-build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.2.0",
     "pytest-coverage>=0.0",
     "pytest-qt>=4.5.0",
+    "ruff>=0.17.3",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["ffd"]
+testpaths = ["ffd/tests"]             # only look here; faster, avoids stray matches
+
+[tool.ty.environment]
+root = ["ffd"]

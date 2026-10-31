@@ -1,3 +1,5 @@
+#!/usr/bin/env -S uv run marimo edit
+
 import marimo
 
 __generated_with = "0.25.2"
@@ -6,15 +8,16 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    import marimo as mo
-    import numpy as np
     from math import comb
+
+    import marimo as mo
     import matplotlib.pyplot as plt
+    import numpy as np
 
     return comb, mo, np, plt
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(mo):
     mo.md(r"""
     # Bernstein Polynomials and Free Form Deformation
@@ -75,9 +78,7 @@ def _(comb, np):
 def _(mo, np):
     values = np.linspace(0, 1.0, 200)
 
-    degree = mo.ui.slider(
-        start=1, stop=20, value=3, step=1, label="slider", show_value=True
-    )
+    degree = mo.ui.slider(start=1, stop=20, value=3, step=1, label="slider", show_value=True)
     degree
     return degree, values
 

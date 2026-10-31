@@ -51,3 +51,39 @@ classDiagram
 ```
 
 This is still the initial design and will change as I progress, but this is the first thing you should do when starting the project.
+
+## New Lattice Design
+
+The next stage is to design the lattice class here is a new basic class diagram.
+
+```mermaid
+classDiagram
+class ControlPoint {
+        +Vec3 pos
+        +bool selected
+    }
+
+class Lattice {
+        +tuple~int~ shape
+        +Vec3 origin
+        +Vec3 s
+        +Vec3 t
+        +Vec3 u
+        +int version
+        +list~ControlPoint~ cvs
+        +from_extents(shape, bbox_min, bbox_max, padding)$ Lattice
+        +select_all()
+        +deselect_all()
+        +selection_centre() Vec3
+        +move_selected(delta: Vec3)
+        +rotate_selected(angle, axis, pivot)
+        +scale_selected(factor: Vec3, pivot)
+        +reset()
+        +edges() list
+        +embed(point: Vec3) Vec3
+        +evaluate(stu: Vec3) Vec3
+    }
+
+    Lattice "1" *-- "many" ControlPoint : contains
+
+```

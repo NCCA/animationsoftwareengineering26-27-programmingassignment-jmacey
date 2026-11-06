@@ -1,0 +1,30 @@
+[project]
+name = "FFD"
+version = "0.1.0"
+description = "An implementation of Free Form Deformations"
+readme = "README.md"
+authors = [
+    { name = "Jon Macey", email = "jmacey@bournemouth.ac.uk" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "marimo>=0.25.2",
+    "matplotlib>=3.11.2",
+    "ncca-ngl>=1.0.3",
+]
+
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-coverage>=0.0",
+    "pytest-qt>=4.5.0",
+    "ruff>=0.17.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["ffd"]
+testpaths = ["ffd/tests"]             # only look here; faster, avoids stray matches
+
+[tool.ty.environment]
+root = ["ffd"]

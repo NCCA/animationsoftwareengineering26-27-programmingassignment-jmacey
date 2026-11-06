@@ -87,3 +87,78 @@ class Lattice {
     Lattice "1" *-- "many" ControlPoint : contains
 
 ```
+
+```mermaid
+classDiagram
+  direction LR
+
+  class Lattice {
+      -tuple _shape
+      -Vec3 _origin
+      -Vec3 _s
+      -Vec3 _t
+      -Vec3 _u
+      -float _volume
+      -list~Vec3~ _rest
+      -list~ControlPoint~ _cvs
+      -int _version
+      +shape tuple «property»
+      +origin Vec3 «property»
+      +s Vec3 «property»
+      +t Vec3 «property»
+      +u Vec3 «property»
+      +cvs tuple~ControlPoint~ «property»
+      +version int «property»
+      +selected list~ControlPoint~ «property»
+      +__init__(shape, bbox_min Vec3, bbox_max Vec3)
+      +from_extents(shape, bbox_min Vec3, bbox_max Vec3, padding float)$ Lattice
+      -_build_grid() list~Vec3~
+      +index(i int, j int, k int) int
+      +__getitem__(ijk) ControlPoint
+      +__len__() int
+      +__iter__() Iterator
+      +select_all() None
+      +deselect_all() None
+      +selection_centre() Optional~Vec3~
+      +move_selected(delta Vec3) None
+      +rotate_selected(angle float, axis str, pivot Vec3) None
+      +scale_selected(factor Vec3, pivot Vec3) None
+      +reset() None
+      +edges() list~tuple~
+      +positions() list~Vec3~
+      +embed(point Vec3) Vec3
+      +inside(stu Vec3)$ bool
+      +evaluate(stu Vec3) Vec3
+  }
+
+  class ControlPoint {
+      +pos Vec3
+      +selected bool
+      +move(delta Vec3) None
+      +toggle_selected() None
+  }
+
+  class bernstein {
+      <<function>>
+      +bernstein(degree int, t float) list~float~
+  }
+
+  class Vec3 {
+      <<ngl>>
+  }
+
+  class Mat3 {
+      <<ngl>>
+      +rotate_x(angle)$ Mat3
+      +rotate_y(angle)$ Mat3
+      +rotate_z(angle)$ Mat3
+  }
+
+  Lattice "1" *-- "l·m·n" ControlPoint : _cvs (flat, k fastest)
+  Lattice --> Vec3 : origin, s, t, u, _rest
+  Lattice ..> Mat3 : rotate_selected
+  Lattice ..> bernstein : evaluate
+  ControlPoint --> Vec3 : pos
+
+
+```

@@ -13,8 +13,8 @@ import traceback
 
 import OpenGL.GL as gl
 from lattice import Lattice
-from ncca.ngl import Mat4, Vec3, Vec3Array, logger, look_at, perspective
-from ncca.ngl.opengl import IndexVertexData, VAOFactory, VAOType
+from ncca.ngl import Mat4, Prims, Transform, Vec3, Vec3Array, logger, look_at, perspective
+from ncca.ngl.opengl import DefaultShader, IndexVertexData, Primitives, ShaderLib, VAOFactory, VAOType
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtOpenGL import QOpenGLWindow
@@ -53,7 +53,8 @@ class MainWindow(QOpenGLWindow):
         self.original_y_pos: int = 0  # Initial Y position of the mouse when a translation starts
         self.INCREMENT: float = 0.01  # Sensitivity for translation
         self.ZOOM: float = 0.1  # Sensitivity for zooming
-        self.lattice: Lattice = Lattice((3, 3, 3), Vec3(-1, 1, 1), Vec3(1, 1, 1))
+        self.lattice: Lattice = Lattice((6, 4, 3), Vec3(-1, -1, -1), Vec3(1, 1, 1))
+        self.lattice_index = 0
 
     def initializeGL(self) -> None:
         """
@@ -68,21 +69,27 @@ class MainWindow(QOpenGLWindow):
         # Enable multisampling for anti-aliasing, which smooths jagged edges
         gl.glEnable(gl.GL_MULTISAMPLE)
         # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
-        self.view = look_at(Vec3(0, 1, 4), Vec3(0, 0, 0), Vec3(0, 1, 0))
+        self.view = look_at(Vec3(0, 0, 4), Vec3(0, 0, 0), Vec3(0, 1, 0))
+        # make sure vao is created before we build it as it used in the re-usable method build_vao
+        self.vao = VAOFactory.create_vao(VAOType.SIMPLE_INDEX, gl.GL_LINES)
         self._build_vao()
+        ShaderLib.use(DefaultShader.COLOUR)
+        ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
+        Primitives.load_default_primitives()
+        Primitives.create(Prims.SPHERE, "sphere", 0.5, 20)
 
     def _build_vao(self):
         verts = Vec3Array(self.lattice.control_points)
         print(verts)
         indices = [index for edge in self.lattice.edges() for index in edge]
         print(indices)
-        self.vao = VAOFactory.create_vao(VAOType.SIMPLE_INDEX, gl.GL_LINES)
         with self.vao:
             data = IndexVertexData(
                 data=verts.to_list(), size=len(indices), indices=indices, index_type=gl.GL_UNSIGNED_SHORT
             )
             self.vao.set_data(data)
             self.vao.set_vertex_attribute_pointer(0, 3, gl.GL_FLOAT, 0, 0)
+            print("VAO created")
 
     def paintGL(self) -> None:
         """
@@ -93,10 +100,36 @@ class MainWindow(QOpenGLWindow):
         # Set the viewport to cover the entire window
         gl.glViewport(0, 0, self.window_width, self.window_height)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        rot_x = Mat4.rotate_x(self.spin_x_face)
+        rot_y = Mat4().rotate_y(self.spin_y_face)
+        self.mouse_global_tx = rot_y @ rot_x
+        # update position
+        self.mouse_global_tx[3, 0] = self.model_position.x
+        self.mouse_global_tx[3, 1] = self.model_position.y
+        self.mouse_global_tx[3, 2] = self.model_position.z
+
+        mvp: Mat4 = self.project @ self.view @ self.mouse_global_tx
+        ShaderLib.set_uniform("MVP", mvp)
         with self.vao:
+            ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
             self.vao.draw()
 
-        # --- All drawing code should go here ---
+        self._draw_control_points()
+
+    def _draw_control_points(self):
+        tx = Transform()
+        tx.set_scale(0.05, 0.05, 0.05)
+        for cvs in self.lattice:
+            pos = cvs.pos
+            tx.set_position(pos.x, pos.y, pos.z)
+            mvp = self.project @ self.view @ self.mouse_global_tx @ tx.matrix()
+            ShaderLib.set_uniform("MVP", mvp)
+            if cvs.selected:
+                ShaderLib.set_uniform("Colour", 1.0, 0.0, 0.0, 0.0)
+                Primitives.draw("sphere")
+            else:
+                ShaderLib.set_uniform("Colour", 1.0, 1.0, 0.0, 0.0)
+                Primitives.draw(Prims.CUBE)
 
     def resizeGL(self, w: int, h: int) -> None:
         """
@@ -136,6 +169,43 @@ class MainWindow(QOpenGLWindow):
             self.spin_x_face = 0
             self.spin_y_face = 0
             self.model_position.set(0, 0, 0)
+
+        elif key == Qt.Key_A:
+            self.lattice.select_all()
+        elif key == Qt.Key_N:
+            self.lattice.deselect_all()
+
+        elif key == Qt.Key_1:
+            self.lattice.cvs[self.lattice_index].toggle_selected()
+            if self.lattice_index > 0:
+                self.lattice_index -= 1
+            self.lattice.cvs[self.lattice_index].toggle_selected()
+
+        elif key == Qt.Key_2:
+            self.lattice.cvs[self.lattice_index].toggle_selected()
+            if self.lattice_index <= len(self.lattice.cvs):
+                self.lattice_index += 1
+            self.lattice.cvs[self.lattice_index].toggle_selected()
+
+        elif key == Qt.Key_Up:
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.1, 0.0))
+            self._build_vao()
+        elif key == Qt.Key_Down:
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, -0.1, 0.0))
+            self._build_vao()
+        elif key == Qt.Key_Left:
+            self.lattice.cvs[self.lattice_index].move(Vec3(-0.1, 0.0, 0.0))
+            self._build_vao()
+        elif key == Qt.Key_Right:
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.1, -0.1, 0.0))
+            self._build_vao()
+        elif key == Qt.Key_I:
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, -0.1))
+            self._build_vao()
+        elif key == Qt.Key_O:
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, -0.0, 0.1))
+            self._build_vao()
+
         # Trigger a redraw to apply changes
         self.update()
         super().keyPressEvent(event)
@@ -297,9 +367,9 @@ if __name__ == "__main__":
 
     window = MainWindow()
     # Set the initial window size
-    window.resize(1024, 720)
     # Show the window
     window.show()
+    window.resize(1024, 720)
 
     if args.smoketest is not None:
         QTimer.singleShot(args.smoketest, lambda: (print("SMOKETEST OK"), app.quit()))

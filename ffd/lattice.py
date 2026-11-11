@@ -82,6 +82,10 @@ class Lattice:
         return tuple(self._cvs)
 
     @property
+    def control_points(self) -> tuple[Vec3, ...]:
+        return tuple(cp.pos for cp in self._cvs)
+
+    @property
     def origin(self) -> Vec3:
         return self._origin
 
@@ -107,7 +111,7 @@ class Lattice:
         """
         l, m, n = self._shape
         return [
-            self._origin + self._s * (i / l - 1) + self._t * (j / (m - 1)) + self._u * (k / (n - 1))
+            self._origin + self._s * (i / (l - 1)) + self._t * (j / (m - 1)) + self._u * (k / (n - 1))
             for i in range(l)
             for j in range(m)
             for k in range(n)
@@ -142,3 +146,18 @@ class Lattice:
         for cp in self._cvs:
             if cp.selected:
                 cp.toggle_selected()
+
+    def edges(self) -> list[int, int]:
+        l, m, n = self._shape
+        edges = []
+        for i in range(l):
+            for j in range(m):
+                for k in range(n):
+                    if i + 1 < l:
+                        edges.append((self.index(i, j, k), self.index(i + 1, j, k)))
+                    if j + 1 < m:
+                        edges.append((self.index(i, j, k), self.index(i, j + 1, k)))
+                    if k + 1 < n:
+                        edges.append((self.index(i, j, k), self.index(i, j, k + 1)))
+
+        return edges

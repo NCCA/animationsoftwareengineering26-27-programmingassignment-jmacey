@@ -130,3 +130,8 @@ def test_selection_toggle(lattice):
     assert len(lattice.selected) == 1
     lattice[0, 0, 0].toggle_selected()
     assert len(lattice.selected) == 0
+
+
+def test_get_edges(lattice):
+    assert len(lattice.edges()) == 12
+    print(lattice.edges())

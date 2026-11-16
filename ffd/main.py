@@ -12,9 +12,10 @@ import sys
 import traceback
 
 import OpenGL.GL as gl
+from ffd_obj import FFDObj
 from lattice import Lattice
 from ncca.ngl import Mat4, Prims, Transform, Vec3, Vec3Array, logger, look_at, perspective
-from ncca.ngl.opengl import DefaultShader, IndexVertexData, Primitives, ShaderLib, VAOFactory, VAOType
+from ncca.ngl.opengl import DefaultShader, IndexVertexData, OpenGLMesh, Primitives, ShaderLib, VAOFactory, VAOType
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtOpenGL import QOpenGLWindow
@@ -53,7 +54,9 @@ class MainWindow(QOpenGLWindow):
         self.original_y_pos: int = 0  # Initial Y position of the mouse when a translation starts
         self.INCREMENT: float = 0.01  # Sensitivity for translation
         self.ZOOM: float = 0.1  # Sensitivity for zooming
-        self.lattice: Lattice = Lattice((6, 4, 3), Vec3(-1, -1, -1), Vec3(1, 1, 1))
+        self.obj = FFDObj("Helix.obj")
+
+        self.lattice: Lattice = Lattice((6, 4, 3), self.obj.bbox_min, self.obj.bbox_max)
         self.lattice_index = 0
 
     def initializeGL(self) -> None:
@@ -77,6 +80,8 @@ class MainWindow(QOpenGLWindow):
         ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
         Primitives.load_default_primitives()
         Primitives.create(Prims.SPHERE, "sphere", 0.5, 20)
+        self.mesh_opengl = OpenGLMesh(self.obj)
+        self.mesh_opengl.upload()
 
     def _build_vao(self):
         verts = Vec3Array(self.lattice.control_points)
@@ -113,7 +118,7 @@ class MainWindow(QOpenGLWindow):
         with self.vao:
             ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
             self.vao.draw()
-
+        self.mesh_opengl.draw()
         self._draw_control_points()
 
     def _draw_control_points(self):
@@ -183,7 +188,7 @@ class MainWindow(QOpenGLWindow):
 
         elif key == Qt.Key_2:
             self.lattice.cvs[self.lattice_index].toggle_selected()
-            if self.lattice_index <= len(self.lattice.cvs):
+            if self.lattice_index <= len(self.lattice.cvs) - 1:
                 self.lattice_index += 1
             self.lattice.cvs[self.lattice_index].toggle_selected()
 
@@ -197,7 +202,7 @@ class MainWindow(QOpenGLWindow):
             self.lattice.cvs[self.lattice_index].move(Vec3(-0.1, 0.0, 0.0))
             self._build_vao()
         elif key == Qt.Key_Right:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.1, -0.1, 0.0))
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.1, 0.0, 0.0))
             self._build_vao()
         elif key == Qt.Key_I:
             self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, -0.1))

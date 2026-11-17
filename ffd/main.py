@@ -10,11 +10,13 @@ It is designed to be a starting point for more complex OpenGL applications.
 import argparse
 import sys
 import traceback
+from pathlib import Path
 
 import OpenGL.GL as gl
+from ffd_obj import FFDObj
 from lattice import Lattice
 from ncca.ngl import Mat4, Prims, Transform, Vec3, Vec3Array, logger, look_at, perspective
-from ncca.ngl.opengl import DefaultShader, IndexVertexData, Primitives, ShaderLib, VAOFactory, VAOType
+from ncca.ngl.opengl import DefaultShader, IndexVertexData, OpenGLMesh, Primitives, ShaderLib, VAOFactory, VAOType
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtOpenGL import QOpenGLWindow
@@ -40,7 +42,7 @@ class MainWindow(QOpenGLWindow):
         # --- Window and UI Attributes ---
         self.window_width: int = 1024  # Window width¦
         self.window_height: int = 720  # Window height
-        self.setTitle("Blank PySide6 py-ngl")
+        self.setTitle("Simple FFD Demo")
 
         # --- Mouse Control Attributes for Camera Manipulation ---
         self.rotate: bool = False  # Flag to check if the scene is being rotated
@@ -53,8 +55,11 @@ class MainWindow(QOpenGLWindow):
         self.original_y_pos: int = 0  # Initial Y position of the mouse when a translation starts
         self.INCREMENT: float = 0.01  # Sensitivity for translation
         self.ZOOM: float = 0.1  # Sensitivity for zooming
-        self.lattice: Lattice = Lattice((6, 4, 3), Vec3(-1, -1, -1), Vec3(1, 1, 1))
+        self.obj = FFDObj(Path(__file__).resolve().parent / "tests/" / "unit_sphere.obj")  # "Helix.obj")
+        self.lattice: Lattice = Lattice((6, 4, 3), self.obj.bbox_min, self.obj.bbox_max)
         self.lattice_index = 0
+        # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
+        self.view = look_at(self.obj.bbox_max * 2, Vec3(0, 0, 0), Vec3(0, 1, 0))
 
     def initializeGL(self) -> None:
         """
@@ -68,8 +73,6 @@ class MainWindow(QOpenGLWindow):
         gl.glEnable(gl.GL_DEPTH_TEST)
         # Enable multisampling for anti-aliasing, which smooths jagged edges
         gl.glEnable(gl.GL_MULTISAMPLE)
-        # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
-        self.view = look_at(Vec3(0, 0, 4), Vec3(0, 0, 0), Vec3(0, 1, 0))
         # make sure vao is created before we build it as it used in the re-usable method build_vao
         self.vao = VAOFactory.create_vao(VAOType.SIMPLE_INDEX, gl.GL_LINES)
         self._build_vao()
@@ -77,6 +80,8 @@ class MainWindow(QOpenGLWindow):
         ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
         Primitives.load_default_primitives()
         Primitives.create(Prims.SPHERE, "sphere", 0.5, 20)
+        self.mesh_opengl = OpenGLMesh(self.obj)
+        self.mesh_opengl.upload()
 
     def _build_vao(self):
         verts = Vec3Array(self.lattice.control_points)
@@ -110,13 +115,19 @@ class MainWindow(QOpenGLWindow):
 
         mvp: Mat4 = self.project @ self.view @ self.mouse_global_tx
         ShaderLib.set_uniform("MVP", mvp)
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
         with self.vao:
             ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
             self.vao.draw()
 
+        ShaderLib.set_uniform("Colour", 0.6, 0.6, 0.6, 1.0)
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+        self.mesh_opengl.draw()
+
         self._draw_control_points()
 
     def _draw_control_points(self):
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
         tx = Transform()
         tx.set_scale(0.05, 0.05, 0.05)
         for cvs in self.lattice:

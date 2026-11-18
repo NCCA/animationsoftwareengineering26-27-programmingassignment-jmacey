@@ -12,6 +12,7 @@ Notes :
 
 from math import comb
 
+from bernstein import bernstein
 from ncca.ngl import Mat3, Vec3
 
 
@@ -134,7 +135,7 @@ class Lattice:
         return iter(self._cvs)
 
     @property
-    def selected(self) -> list[ControlPoints]:
+    def selected(self) -> list[ControlPoint]:
         return [cp for cp in self._cvs if cp.selected]
 
     def select_all(self):
@@ -161,3 +162,31 @@ class Lattice:
                         edges.append((self.index(i, j, k), self.index(i, j, k + 1)))
 
         return edges
+
+    def embed(self, point: Vec3) -> Vec3:
+        """
+        Find the local (s,t,u) cords of the world space point (see Sederberg and Parry paper)
+        This is the bit where the Maths comes into play see the notebook section Embedding the object for details.
+        """
+        offset = point - self._origin
+        tu = self._t.cross(self._u)
+        su = self._s.cross(self._u)
+        st = self._s.cross(self._t)
+        return Vec3(
+            tu.dot(offset) / tu.dot(self._s), su.dot(offset) / su.dot(self._t), st.dot(offset) / st.dot(self._u)
+        )
+
+    def evaluate(self, stu: Vec3) -> Vec3:
+        """
+        This calcualtes the deformed position based on the embeding
+        """
+        l, m, n = self._shape
+        bs = bernstein(l - 1, stu.x)
+        bt = bernstein(m - 1, stu.y)
+        bu = bernstein(n - 1, stu.z)
+        result = Vec3()
+        for i in range(l):
+            for j in range(m):
+                for k in range(n):
+                    result += self[i, j, k].pos * (bs[i] * bt[j] * bu[k])
+        return result

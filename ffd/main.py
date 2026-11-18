@@ -8,6 +8,8 @@ It is designed to be a starting point for more complex OpenGL applications.
 """
 
 import argparse
+import cProfile
+import pstats
 import sys
 import traceback
 
@@ -54,10 +56,13 @@ class MainWindow(QOpenGLWindow):
         self.original_y_pos: int = 0  # Initial Y position of the mouse when a translation starts
         self.INCREMENT: float = 0.01  # Sensitivity for translation
         self.ZOOM: float = 0.1  # Sensitivity for zooming
-        self.obj = FFDObj("Helix.obj")
+        self.obj = FFDObj("Helix.obj")  # "Helix.obj")
 
-        self.lattice: Lattice = Lattice((6, 4, 3), self.obj.bbox_min, self.obj.bbox_max)
+        self.lattice: Lattice = Lattice((3, 3, 3), self.obj.bbox_min, self.obj.bbox_max)
         self.lattice_index = 0
+        self.obj.bind(self.lattice)
+        # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
+        self.view = look_at(self.obj.bbox_max * 2.0, self.obj.bbox_min - self.obj.bbox_max, Vec3(0, 1, 0))
 
     def initializeGL(self) -> None:
         """
@@ -71,8 +76,6 @@ class MainWindow(QOpenGLWindow):
         gl.glEnable(gl.GL_DEPTH_TEST)
         # Enable multisampling for anti-aliasing, which smooths jagged edges
         gl.glEnable(gl.GL_MULTISAMPLE)
-        # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
-        self.view = look_at(Vec3(0, 0, 4), Vec3(0, 0, 0), Vec3(0, 1, 0))
         # make sure vao is created before we build it as it used in the re-usable method build_vao
         self.vao = VAOFactory.create_vao(VAOType.SIMPLE_INDEX, gl.GL_LINES)
         self._build_vao()
@@ -85,9 +88,7 @@ class MainWindow(QOpenGLWindow):
 
     def _build_vao(self):
         verts = Vec3Array(self.lattice.control_points)
-        print(verts)
         indices = [index for edge in self.lattice.edges() for index in edge]
-        print(indices)
         with self.vao:
             data = IndexVertexData(
                 data=verts.to_list(), size=len(indices), indices=indices, index_type=gl.GL_UNSIGNED_SHORT
@@ -95,6 +96,21 @@ class MainWindow(QOpenGLWindow):
             self.vao.set_data(data)
             self.vao.set_vertex_attribute_pointer(0, 3, gl.GL_FLOAT, 0, 0)
             print("VAO created")
+
+    def _lattice_changed(self):
+        self.obj.bind(self.lattice)
+        self._build_vao()
+
+        profiler = cProfile.Profile()
+        profiler.enable()
+        self.obj.deform(self.lattice)
+        profiler.disable()
+        with open("stats.txt", "w") as stream:
+            stats = pstats.Stats(profiler, stream=stream)
+            stats.sort_stats("cumulative")
+            stats.print_stats()
+
+        self.mesh_opengl.upload(force=True)
 
     def paintGL(self) -> None:
         """
@@ -115,11 +131,16 @@ class MainWindow(QOpenGLWindow):
 
         mvp: Mat4 = self.project @ self.view @ self.mouse_global_tx
         ShaderLib.set_uniform("MVP", mvp)
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
         with self.vao:
             ShaderLib.set_uniform("Colour", 1.0, 1.0, 1.0, 1.0)
             self.vao.draw()
-        self.mesh_opengl.draw()
         self._draw_control_points()
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+
+        ShaderLib.set_uniform("MVP", mvp)
+        ShaderLib.set_uniform("Colour", 0.6, 0.6, 0.6, 1.0)
+        self.mesh_opengl.draw()
 
     def _draw_control_points(self):
         tx = Transform()
@@ -194,22 +215,22 @@ class MainWindow(QOpenGLWindow):
 
         elif key == Qt.Key_Up:
             self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.1, 0.0))
-            self._build_vao()
+            self._lattice_changed()
         elif key == Qt.Key_Down:
             self.lattice.cvs[self.lattice_index].move(Vec3(0.0, -0.1, 0.0))
-            self._build_vao()
+            self._lattice_changed()
         elif key == Qt.Key_Left:
             self.lattice.cvs[self.lattice_index].move(Vec3(-0.1, 0.0, 0.0))
-            self._build_vao()
+            self._lattice_changed()
         elif key == Qt.Key_Right:
             self.lattice.cvs[self.lattice_index].move(Vec3(0.1, 0.0, 0.0))
-            self._build_vao()
+            self._lattice_changed()
         elif key == Qt.Key_I:
             self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, -0.1))
-            self._build_vao()
+            self._lattice_changed()
         elif key == Qt.Key_O:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, -0.0, 0.1))
-            self._build_vao()
+            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, 0.1))
+            self._lattice_changed()
 
         # Trigger a redraw to apply changes
         self.update()

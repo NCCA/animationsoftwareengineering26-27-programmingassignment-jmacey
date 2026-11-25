@@ -13,7 +13,12 @@ Notes :
 from math import comb
 
 from bernstein import bernstein
+from colour_generator import RGB, colour_generator
 from ncca.ngl import Mat3, Vec3
+
+colour_generator.reserve((255, 0, 0))
+colour_generator.reserve((0, 255, 0))
+colour_generator.reserve((0, 0, 255))
 
 
 class ControlPoint:
@@ -31,6 +36,11 @@ class ControlPoint:
             raise ValueError("need Vec3 only")
         self._pos = pos
         self._selected = False
+        self._colour_id = colour_generator.get_next_colour_id()
+
+    @property
+    def colour_id(self) -> RGB:
+        return self._colour_id
 
     @property
     def pos(self) -> Vec3:

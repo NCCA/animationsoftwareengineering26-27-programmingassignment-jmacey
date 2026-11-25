@@ -83,6 +83,8 @@ class Lattice:
         self._volume = float(self._t.cross(self._u).dot(self._s))
         self._rest = self._build_grid()
         self._cvs = [ControlPoint(p.copy()) for p in self._rest]
+        # reverse lookup so a picked colour gives us the control point back
+        self._by_colour = {cp.colour_id: cp for cp in self._cvs}
 
     @property
     def shape(self) -> tuple[int, int, int]:
@@ -115,6 +117,15 @@ class Lattice:
     @property
     def volume(self) -> float:
         return self._volume
+
+    def toggle(self, cvs) -> None:
+        """Flip the selection of the given control points, leaving the rest alone."""
+        for cp in cvs:
+            cp.toggle_selected()
+
+    def find_by_colour(self, colour: RGB) -> ControlPoint | None:
+        """Return the control point drawn with this picking colour, or None."""
+        return self._by_colour.get(tuple(colour))
 
     def _build_grid(self) -> list[Vec3]:
         """

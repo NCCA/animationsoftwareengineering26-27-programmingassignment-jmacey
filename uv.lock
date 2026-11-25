@@ -252,6 +252,7 @@ dependencies = [
     { name = "marimo" },
     { name = "matplotlib" },
     { name = "ncca-ngl" },
+    { name = "pillow" },
 ]
 
 [package.dev-dependencies]
@@ -267,6 +268,7 @@ requires-dist = [
     { name = "marimo", specifier = ">=0.25.2" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "ncca-ngl", specifier = ">=1.0.3" },
+    { name = "pillow", specifier = ">=13.0.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -15,15 +15,18 @@ import traceback
 from pathlib import Path
 
 import OpenGL.GL as gl
+from ffd_obj import FFDObj
+from lattice import Lattice
 from ncca.ngl import Mat4, Prims, Transform, Vec3, Vec3Array, logger, look_at, perspective
 from ncca.ngl.opengl import DefaultShader, IndexVertexData, OpenGLMesh, Primitives, ShaderLib, VAOFactory, VAOType
+from picking import PickBuffer, colour_to_float, colours_in_pixels, nearest_colour, pick_region
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtOpenGL import QOpenGLWindow
 from PySide6.QtWidgets import QApplication
 
-from ffd_obj import FFDObj
-from lattice import Lattice
+# half size of the block read around the cursor for a single click pick
+PICK_RADIUS = 3
 
 
 class MainWindow(QOpenGLWindow):
@@ -61,10 +64,13 @@ class MainWindow(QOpenGLWindow):
         self.obj = FFDObj("unit_sphere.obj")  # "Helix.obj")
 
         self.lattice: Lattice = Lattice((3, 3, 3), self.obj.bbox_min, self.obj.bbox_max)
-        self.lattice_index = 0
         self.obj.bind(self.lattice)
         # It looks from (0, 1, 4) towards (0, 0, 0) with the 'up' direction along the Y-axis.
         self.view = look_at(self.obj.bbox_max * 2.0, self.obj.bbox_min - self.obj.bbox_max, Vec3(0, 1, 0))
+        # --- Picking Attributes ---
+        self.pick_buffer: PickBuffer | None = None
+        self.press_pos = None  # where the left button went down
+        self.current_pos = None  # where the mouse is now during a left drag
 
     def initializeGL(self) -> None:
         """
@@ -87,6 +93,7 @@ class MainWindow(QOpenGLWindow):
         Primitives.create(Prims.SPHERE, "sphere", 0.5, 20)
         self.mesh_opengl = OpenGLMesh(self.obj)
         self.mesh_opengl.upload()
+        self.pick_buffer = PickBuffer()
 
     def _build_vao(self):
         verts = Vec3Array(self.lattice.control_points)
@@ -144,6 +151,59 @@ class MainWindow(QOpenGLWindow):
         ShaderLib.set_uniform("Colour", 0.6, 0.6, 0.6, 1.0)
         self.mesh_opengl.draw()
 
+    def _move_selected(self, delta: Vec3) -> None:
+        """Move all the selected control points and re-deform the mesh."""
+        selected = self.lattice.selected
+        if not selected:
+            return
+        for cp in selected:
+            cp.move(delta)
+        self._lattice_changed()
+
+    def _render_pick_buffer(self) -> None:
+        self.makeCurrent()
+        with self.pick_buffer:
+            gl.glDisable(gl.GL_MULTISAMPLE)
+            gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
+            ShaderLib.use(DefaultShader.COLOUR)
+            tx = Transform()
+            tx.set_scale(0.05, 0.05, 0.05)
+            for cvs in self.lattice:
+                pos = cvs.pos
+                tx.set_position(pos.x, pos.y, pos.z)
+                ShaderLib.set_uniform("MVP", self.project @ self.view @ self.mouse_global_tx @ tx.matrix())
+                ShaderLib.set_uniform("Colour", *colour_to_float(cvs.colour_id))
+                Primitives.draw(Prims.CUBE)
+
+    def _end_pick(self) -> None:
+        """Put the GL state back how paintGL expects it."""
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.defaultFramebufferObject())
+        gl.glEnable(gl.GL_MULTISAMPLE)
+        gl.glClearColor(0.4, 0.4, 0.4, 1.0)
+
+    def _pick_point(self, x: float, y: float) -> None:
+        """Toggle the selection of the control point under the cursor.
+
+        The rest of the selection is left alone, clicking on nothing does nothing.
+        """
+        region = pick_region(
+            x - PICK_RADIUS,
+            y - PICK_RADIUS,
+            x + PICK_RADIUS,
+            y + PICK_RADIUS,
+            self.window_width,
+            self.window_height,
+            self.devicePixelRatio(),
+        )
+        if region is None:
+            return
+        self._render_pick_buffer()
+        colour = nearest_colour(self.pick_buffer.read(*region))
+        self._end_pick()
+        cp = self.lattice.find_by_colour(colour) if colour is not None else None
+        if cp is not None:
+            self.lattice.toggle([cp])
+
     def _draw_control_points(self):
         gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
         tx = Transform()
@@ -176,6 +236,7 @@ class MainWindow(QOpenGLWindow):
         self.window_width = int(w * self.devicePixelRatio())
         self.window_height = int(h * self.devicePixelRatio())
         self.project = perspective(45.0, float(w) / h, 0.01, 350.0)
+        self.pick_buffer.resize(self.window_width, self.window_height)
 
     def keyPressEvent(self, event) -> None:
         """
@@ -204,36 +265,21 @@ class MainWindow(QOpenGLWindow):
         elif key == Qt.Key_N:
             self.lattice.deselect_all()
 
-        elif key == Qt.Key_1:
-            self.lattice.cvs[self.lattice_index].toggle_selected()
-            if self.lattice_index > 0:
-                self.lattice_index -= 1
-            self.lattice.cvs[self.lattice_index].toggle_selected()
-
-        elif key == Qt.Key_2:
-            self.lattice.cvs[self.lattice_index].toggle_selected()
-            if self.lattice_index <= len(self.lattice.cvs) - 1:
-                self.lattice_index += 1
-            self.lattice.cvs[self.lattice_index].toggle_selected()
+        elif key == Qt.Key_P:
+            self.pick_buffer.save_png("pick_buffer.png")
 
         elif key == Qt.Key_Up:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.1, 0.0))
-            self._lattice_changed()
+            self._move_selected(Vec3(0.0, 0.1, 0.0))
         elif key == Qt.Key_Down:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, -0.1, 0.0))
-            self._lattice_changed()
+            self._move_selected(Vec3(0.0, -0.1, 0.0))
         elif key == Qt.Key_Left:
-            self.lattice.cvs[self.lattice_index].move(Vec3(-0.1, 0.0, 0.0))
-            self._lattice_changed()
+            self._move_selected(Vec3(-0.1, 0.0, 0.0))
         elif key == Qt.Key_Right:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.1, 0.0, 0.0))
-            self._lattice_changed()
+            self._move_selected(Vec3(0.1, 0.0, 0.0))
         elif key == Qt.Key_I:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, -0.1))
-            self._lattice_changed()
+            self._move_selected(Vec3(0.0, 0.0, -0.1))
         elif key == Qt.Key_O:
-            self.lattice.cvs[self.lattice_index].move(Vec3(0.0, 0.0, 0.1))
-            self._lattice_changed()
+            self._move_selected(Vec3(0.0, 0.0, 0.1))
 
         # Trigger a redraw to apply changes
         self.update()
@@ -281,6 +327,7 @@ class MainWindow(QOpenGLWindow):
         position = event.position()
         # Left button initiates rotation
         if event.button() == Qt.LeftButton:
+            self.press_pos = position
             self.original_x_rotation = position.x()
             self.original_y_rotation = position.y()
             self.rotate = True
@@ -301,10 +348,13 @@ class MainWindow(QOpenGLWindow):
         """
         # Stop rotating when the left button is released
         if event.button() == Qt.LeftButton:
+            self._pick_point(self.press_pos.x(), self.press_pos.y())
             self.rotate = False
+            self.press_pos = None
         # Stop translating when the right button is released
         elif event.button() == Qt.RightButton:
             self.translate = False
+        self.update()
 
     def wheelEvent(self, event) -> None:
         """
